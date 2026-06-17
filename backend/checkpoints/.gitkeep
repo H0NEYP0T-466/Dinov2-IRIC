@@ -1,0 +1,3 @@
+# Place model_best.pth here after training.
+# Download it from the Kaggle notebook's output tab (checkpoints/model_best.pth)
+# and copy it to backend/checkpoints/model_best.pth.

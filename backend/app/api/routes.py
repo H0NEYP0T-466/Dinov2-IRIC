@@ -2,9 +2,9 @@
 
 Endpoints (mounted under ``settings.api_v1_prefix``):
 
-* ``POST /predict``  — upload an image, get multi-label predictions.
+* ``POST /predict``  — upload an image, get skin-lesion classification.
 * ``GET  /health``   — server / model status.
-* ``GET  /classes``  — the 43 BigEarthNet-S2 class names.
+* ``GET  /classes``  — the 9 ISIC 2019 class names.
 
 Every request is assigned a UUID and logged in full (file metadata,
 preprocessing steps, inference details, response summary, errors with stack
@@ -18,7 +18,7 @@ import uuid
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
 
-from ..config import CLASSES_43, settings
+from ..config import ISIC_CLASSES, settings
 from ..services.logger import get_logger
 from ..services.predictor import get_predictor, to_dict
 from ..utils.image_processing import preprocess
@@ -57,14 +57,14 @@ async def health() -> dict:
 
 @router.get("/classes")
 async def classes() -> dict:
-    """Return the full 43-class nomenclature."""
-    log.info("Classes requested | count=%d", len(CLASSES_43))
-    return {"count": len(CLASSES_43), "classes": CLASSES_43}
+    """Return the full 9-class ISIC nomenclature."""
+    log.info("Classes requested | count=%d", len(ISIC_CLASSES))
+    return {"count": len(ISIC_CLASSES), "classes": ISIC_CLASSES}
 
 
 @router.post("/predict")
 async def predict(file: UploadFile = File(...)) -> JSONResponse:
-    """Accept an image upload and return multi-label predictions."""
+    """Accept an image upload and return skin-lesion classification predictions."""
     request_id = str(uuid.uuid4())
     filename = file.filename or "unknown"
 
@@ -158,9 +158,10 @@ async def predict(file: UploadFile = File(...)) -> JSONResponse:
 
     payload = to_dict(result, request_id=request_id, filename=filename)
     log.info(
-        "Response | request_id=%s | detected=%d | inference_ms=%.2f",
+        "Response | request_id=%s | top_class=%s | confidence=%.4f | inference_ms=%.2f",
         request_id,
-        len(payload["predictions"]),
+        payload["top_class"],
+        payload["top_confidence"],
         payload["inference_time_ms"],
     )
     log.info("=" * 70)

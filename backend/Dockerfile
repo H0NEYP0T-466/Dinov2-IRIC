@@ -1,7 +1,7 @@
-# Dinov2-BigEarthS2 backend — local containerized deployment.
+# Dinov2-IRIC backend — local containerized deployment.
 #
-# Build:  docker build -t dinov2-bigearths2-backend ./backend
-# Run:    docker run --gpus all -p 8000:8000 -v $(pwd)/backend/checkpoints:/app/checkpoints dinov2-bigearths2-backend
+# Build:  docker build -t dinov2-iric-backend ./backend
+# Run:    docker run --gpus all -p 8000:8000 -v $(pwd)/backend/checkpoints:/app/checkpoints dinov2-iric-backend
 #
 # CPU-only: drop the --gpus flag.
 

@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=f"{settings.model_name} API",
-    description="Multi-label satellite image classification (DINOv2-B + BigEarthNet-S2, 43 classes).",
+    description="Skin lesion classification (DINOv2-B + ISIC 2019, 9 classes).",
     version="1.0.0",
     lifespan=lifespan,
 )

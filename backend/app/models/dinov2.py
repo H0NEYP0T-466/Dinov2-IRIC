@@ -1,13 +1,13 @@
-"""DINOv2-B multi-label classification model.
+"""DINOv2-B single-label classification model for ISIC 2019.
 
-The architecture here MUST match the training notebook exactly so that
-checkpoints produced by ``kaggle/train_dinov2_bigearths2.ipynb`` load without
-remapping. See :class:`MultiLabelDinoV2`.
+The architecture here MUST match the training script exactly so that
+checkpoints produced by ``kaggle/trainCollab.py`` load without remapping.
+See :class:`MultiLabelDinoV2`.
 
 Backbone: DINOv2-B (``vit_base_patch14_dinov2.lvd142m``), 86M parameters, with
 ``num_classes=0`` so timm returns the 768-d pooled features only. A custom head
-then maps 768 -> 43 raw logits (no sigmoid in the forward pass — sigmoid is
-applied at inference / BCEWithLogitsLoss at training).
+then maps 768 -> 9 raw logits (no softmax in the forward pass — softmax is
+applied at inference / CrossEntropyLoss at training).
 """
 
 from __future__ import annotations
@@ -26,10 +26,10 @@ log = get_logger("app.model")
 
 
 class MultiLabelDinoV2(nn.Module):
-    """DINOv2-B backbone + custom 2-layer multi-label classification head.
+    """DINOv2-B backbone + custom 2-layer classification head.
 
-    Head: Linear(768 -> 512) -> ReLU -> Dropout(0.3) -> Linear(512 -> 43).
-    Output is raw logits; apply ``torch.sigmoid`` for probabilities.
+    Head: Linear(768 -> 512) -> ReLU -> Dropout(0.3) -> Linear(512 -> 9).
+    Output is raw logits; apply ``torch.softmax`` for probabilities.
     """
 
     def __init__(
@@ -58,7 +58,7 @@ class MultiLabelDinoV2(nn.Module):
             num_classes=0,
         )
 
-        # Custom multi-label head. Order matters for checkpoint compatibility.
+        # Custom classification head. Order matters for checkpoint compatibility.
         self.classifier = nn.Sequential(
             OrderedDict(
                 [

@@ -1,12 +1,11 @@
 """Application configuration and shared constants.
 
-The 43-class nomenclature below is the single source of truth for the whole
-system. It mirrors the official BigEarthNet-S2 (Sentinel-2) multi-label class
-set derived from CORINE land-cover codes (the same 43-class list used by
-torchgeo's BigEarthNet dataset). The same literal is duplicated in:
+The 9-class nomenclature below is the single source of truth for the whole
+system. It mirrors the official ISIC 2019 Challenge skin-lesion categories.
+The same literal is duplicated in:
 
-    - kaggle/train_dinov2_bigearths2.ipynb   (training CFG.CLASSES_43)
-    - src/types/index.ts                      (frontend CLASS_NAMES)
+    - kaggle/trainCollab.py              (training ISIC_CLASSES)
+    - src/types/index.ts                 (frontend CLASS_NAMES)
 
 Keep these three copies in sync whenever the class list changes.
 """
@@ -19,58 +18,35 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
-# Official BigEarthNet-S2 43-class multi-label nomenclature (CORINE-derived).
-# Order matches the multi-hot vector indices used during training, so index i
-# in a prediction vector corresponds to CLASSES_43[i].
+# ISIC 2019 — 9-class skin-lesion nomenclature.
+# Order matches the one-hot column order in ISIC_2019_Training_GroundTruth.csv
+# and the model's output logit indices.
 # ---------------------------------------------------------------------------
-CLASSES_43: list[str] = [
-    "Continuous urban fabric",
-    "Discontinuous urban fabric",
-    "Industrial or commercial units",
-    "Road and rail networks and associated land",
-    "Port areas",
-    "Airports",
-    "Mineral extraction sites",
-    "Dump sites",
-    "Construction sites",
-    "Green urban areas",
-    "Sport and leisure facilities",
-    "Non-irrigated arable land",
-    "Permanently irrigated land",
-    "Rice fields",
-    "Vineyards",
-    "Fruit trees and berry plantations",
-    "Olive groves",
-    "Pastures",
-    "Annual crops associated with permanent crops",
-    "Complex cultivation patterns",
-    "Land principally occupied by agriculture, with significant areas of "
-    "natural vegetation",
-    "Agro-forestry areas",
-    "Broad-leaved forest",
-    "Coniferous forest",
-    "Mixed forest",
-    "Natural grassland",
-    "Moors and heathland",
-    "Sclerophyllous vegetation",
-    "Transitional woodland/shrub",
-    "Beaches, dunes, sands",
-    "Bare rock",
-    "Sparsely vegetated areas",
-    "Burnt areas",
-    "Inland marshes",
-    "Peatbogs",
-    "Salt marshes",
-    "Salines",
-    "Intertidal flats",
-    "Water courses",
-    "Water bodies",
-    "Coastal lagoons",
-    "Estuaries",
-    "Sea and ocean",
+ISIC_CLASSES: list[str] = [
+    "MEL",   # Melanoma
+    "NV",    # Melanocytic nevus
+    "BCC",   # Basal cell carcinoma
+    "AK",    # Actinic keratosis
+    "BKL",   # Benign keratosis (solar lentigo / seborrheic keratosis / lichen planus-like keratosis)
+    "DF",    # Dermatofibroma
+    "VASC",  # Vascular lesion
+    "SCC",   # Squamous cell carcinoma
+    "UNK",   # None of the above / Unknown
 ]
 
-assert len(CLASSES_43) == 43, f"Expected 43 classes, got {len(CLASSES_43)}"
+ISIC_CLASS_FULL_NAMES: dict[str, str] = {
+    "MEL":  "Melanoma",
+    "NV":   "Melanocytic nevus",
+    "BCC":  "Basal cell carcinoma",
+    "AK":   "Actinic keratosis",
+    "BKL":  "Benign keratosis",
+    "DF":   "Dermatofibroma",
+    "VASC": "Vascular lesion",
+    "SCC":  "Squamous cell carcinoma",
+    "UNK":  "Unknown",
+}
+
+assert len(ISIC_CLASSES) == 9, f"Expected 9 classes, got {len(ISIC_CLASSES)}"
 
 # ImageNet normalization statistics. DINOv2 was pretrained on ImageNet, so the
 # same mean/std must be used at inference time to match the training
@@ -93,13 +69,13 @@ class Settings(BaseSettings):
     )
 
     # --- Model -------------------------------------------------------------
-    model_name: str = "DINOv2-BigEarthS2"
+    model_name: str = "DINOv2-IRIC"
     backbone_name: str = "vit_base_patch14_dinov2.lvd142m"
     backbone_dim: int = 768
-    num_classes: int = 43
+    num_classes: int = 9
     dropout: float = 0.3
 
-    # Path to the best checkpoint produced by the Kaggle training notebook.
+    # Path to the best checkpoint produced by the training script.
     # Resolved relative to the backend/ directory.
     model_checkpoint: Path = Field(
         default=Path(__file__).resolve().parent.parent / "checkpoints" / "model_best.pth"
@@ -107,7 +83,7 @@ class Settings(BaseSettings):
 
     # --- Inference ---------------------------------------------------------
     device: str = "auto"  # "auto" picks CUDA if available, else CPU
-    inference_threshold: float = 0.5
+    inference_threshold: float = 0.5  # min confidence to report a prediction
     image_size: int = 224
 
     # --- Server ------------------------------------------------------------

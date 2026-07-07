@@ -1,14 +1,15 @@
 /**
- * Shared TypeScript types for the Dinov2-BigEarthS2 frontend.
+ * Shared TypeScript types for the Dinov2-IRIC frontend.
  *
- * The `CLASS_NAMES` array below MUST mirror `CLASSES_43` in
- * `backend/app/config.py` and `CFG.CLASSES_43` in the Kaggle notebook. Keep all
+ * The `CLASS_NAMES` array below MUST mirror `ISIC_CLASSES` in
+ * `backend/app/config.py` and `ISIC_CLASSES` in the training script. Keep all
  * three copies in sync when the class list changes.
  */
 
 /** A single class predicted above threshold. */
 export interface Prediction {
   class_name: string;
+  full_name: string;
   confidence: number;
   class_index: number;
 }
@@ -18,11 +19,13 @@ export interface PredictionResponse {
   request_id: string;
   success: boolean;
   predictions: Prediction[];
-  /** All 43 class names -> probability. */
+  /** All 9 class names -> probability. */
   all_probabilities: Record<string, number>;
   inference_time_ms: number;
   threshold: number;
   model: string;
+  top_class: string;
+  top_confidence: number;
   filename: string;
   error?: string | null;
 }
@@ -43,61 +46,40 @@ export interface ClassesResponse {
 }
 
 /**
- * Official BigEarthNet-S2 43-class nomenclature (CORINE-derived), matching
- * torchgeo's `class_sets[43]` and the backend `CLASSES_43`. Used for the full
+ * ISIC 2019 — 9-class skin-lesion nomenclature, matching the backend
+ * `ISIC_CLASSES` and the training script. Used for the full
  * probability-distribution view in the UI.
  */
 export const CLASS_NAMES: readonly string[] = [
-  'Continuous urban fabric',
-  'Discontinuous urban fabric',
-  'Industrial or commercial units',
-  'Road and rail networks and associated land',
-  'Port areas',
-  'Airports',
-  'Mineral extraction sites',
-  'Dump sites',
-  'Construction sites',
-  'Green urban areas',
-  'Sport and leisure facilities',
-  'Non-irrigated arable land',
-  'Permanently irrigated land',
-  'Rice fields',
-  'Vineyards',
-  'Fruit trees and berry plantations',
-  'Olive groves',
-  'Pastures',
-  'Annual crops associated with permanent crops',
-  'Complex cultivation patterns',
-  'Land principally occupied by agriculture, with significant areas of natural vegetation',
-  'Agro-forestry areas',
-  'Broad-leaved forest',
-  'Coniferous forest',
-  'Mixed forest',
-  'Natural grassland',
-  'Moors and heathland',
-  'Sclerophyllous vegetation',
-  'Transitional woodland/shrub',
-  'Beaches, dunes, sands',
-  'Bare rock',
-  'Sparsely vegetated areas',
-  'Burnt areas',
-  'Inland marshes',
-  'Peatbogs',
-  'Salt marshes',
-  'Salines',
-  'Intertidal flats',
-  'Water courses',
-  'Water bodies',
-  'Coastal lagoons',
-  'Estuaries',
-  'Sea and ocean',
+  'MEL',   // Melanoma
+  'NV',    // Melanocytic nevus
+  'BCC',   // Basal cell carcinoma
+  'AK',    // Actinic keratosis
+  'BKL',   // Benign keratosis
+  'DF',    // Dermatofibroma
+  'VASC',  // Vascular lesion
+  'SCC',   // Squamous cell carcinoma
+  'UNK',   // Unknown
 ] as const;
 
-/** Runtime guard: CLASS_NAMES stays in sync with the backend's 43 classes. */
-if (CLASS_NAMES.length !== 43) {
+/** Full descriptive names for each ISIC class abbreviation. */
+export const CLASS_FULL_NAMES: Record<string, string> = {
+  MEL:  'Melanoma',
+  NV:   'Melanocytic nevus',
+  BCC:  'Basal cell carcinoma',
+  AK:   'Actinic keratosis',
+  BKL:  'Benign keratosis',
+  DF:   'Dermatofibroma',
+  VASC: 'Vascular lesion',
+  SCC:  'Squamous cell carcinoma',
+  UNK:  'Unknown',
+};
+
+/** Runtime guard: CLASS_NAMES stays in sync with the backend's 9 classes. */
+if (CLASS_NAMES.length !== 9) {
   throw new Error(
-    `CLASS_NAMES must contain 43 entries (got ${CLASS_NAMES.length}). ` +
-      'Sync with backend/app/config.py CLASSES_43.',
+    `CLASS_NAMES must contain 9 entries (got ${CLASS_NAMES.length}). ` +
+      'Sync with backend/app/config.py ISIC_CLASSES.',
   );
 }
 

@@ -1,8 +1,12 @@
 """Singleton predictor that owns the loaded model and runs inference.
 
 Instantiated once at application startup (see :func:`get_predictor`) and shared
-across requests. All inference details — raw logits, sigmoid probabilities,
-applied threshold, predicted classes, timing — are logged.
+across requests. All inference details — raw logits, softmax probabilities,
+predicted class, timing — are logged.
+
+ISIC 2019 is a **single-label** classification task (9 classes). The model
+outputs raw logits; softmax is applied here to get probabilities, and the
+top-1 class is reported as the prediction.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ from typing import Any
 
 import torch
 
-from ..config import CLASSES_43, settings
+from ..config import ISIC_CLASSES, ISIC_CLASS_FULL_NAMES, settings
 from ..models.dinov2 import MultiLabelDinoV2, load_model
 from .logger import get_logger
 
@@ -25,6 +29,7 @@ class Prediction:
     """A single detected class above threshold."""
 
     class_name: str
+    full_name: str
     confidence: float
     class_index: int
 
@@ -38,6 +43,8 @@ class PredictionResult:
     inference_time_ms: float
     threshold: float
     model: str
+    top_class: str
+    top_confidence: float
     raw_logits: list[float] = field(default_factory=list)
 
 
@@ -64,7 +71,7 @@ class Predictor:
 
     @torch.no_grad()
     def predict(self, input_tensor: torch.Tensor) -> PredictionResult:
-        """Run a single forward pass and decode the multi-label output.
+        """Run a single forward pass and decode the single-label output.
 
         Args:
             input_tensor: Preprocessed batch of shape (1, 3, 224, 224).
@@ -79,7 +86,7 @@ class Predictor:
 
         # (1, C) -> (C,)
         logits_vec = logits.squeeze(0).detach().cpu()
-        probabilities = torch.sigmoid(logits_vec).tolist()
+        probabilities = torch.softmax(logits_vec, dim=0).tolist()
 
         log.info("Inference complete | time_ms=%.2f", elapsed_ms)
         log.info(
@@ -88,15 +95,20 @@ class Predictor:
             max(logits_vec.tolist()),
             float(logits_vec.mean().item()),
         )
+
+        # Top-1 prediction
+        top_idx = int(torch.argmax(logits_vec).item())
+        top_class = ISIC_CLASSES[top_idx]
+        top_conf = probabilities[top_idx]
+
         log.info(
-            "Sigmoid probabilities | min=%.4f | max=%.4f | above_threshold=%d/%d",
-            min(probabilities),
-            max(probabilities),
-            sum(1 for p in probabilities if p >= self.threshold),
-            self.num_classes,
+            "Softmax probabilities | top_class=%s (%s) | confidence=%.4f",
+            top_class,
+            ISIC_CLASS_FULL_NAMES[top_class],
+            top_conf,
         )
 
-        # Decode predictions above threshold, sorted by confidence desc.
+        # Return all classes above threshold, sorted by confidence desc.
         detected = [
             (i, p)
             for i, p in enumerate(probabilities)
@@ -106,19 +118,22 @@ class Predictor:
 
         predictions = [
             Prediction(
-                class_name=CLASSES_43[i],
+                class_name=ISIC_CLASSES[i],
+                full_name=ISIC_CLASS_FULL_NAMES[ISIC_CLASSES[i]],
                 confidence=round(p, 4),
                 class_index=i,
             )
             for i, p in detected
         ]
 
-        all_probs = {CLASSES_43[i]: round(p, 4) for i, p in enumerate(probabilities)}
+        all_probs = {ISIC_CLASSES[i]: round(p, 4) for i, p in enumerate(probabilities)}
 
         if predictions:
-            top_names = ", ".join(p.class_name for p in predictions[:5])
+            top_names = ", ".join(
+                f"{p.class_name} ({p.full_name})" for p in predictions[:5]
+            )
             log.info(
-                "Detected %d class(es) (top: %s)",
+                "Detected %d class(es) above threshold (top: %s)",
                 len(predictions),
                 top_names,
             )
@@ -131,6 +146,8 @@ class Predictor:
             inference_time_ms=round(elapsed_ms, 2),
             threshold=self.threshold,
             model=self.model_name,
+            top_class=top_class,
+            top_confidence=round(top_conf, 4),
             raw_logits=[round(v, 4) for v in logits_vec.tolist()],
         )
 
@@ -158,13 +175,20 @@ def to_dict(result: PredictionResult, request_id: str, filename: str, success: b
         "request_id": request_id,
         "success": success,
         "predictions": [
-            {"class_name": p.class_name, "confidence": p.confidence, "class_index": p.class_index}
+            {
+                "class_name": p.class_name,
+                "full_name": p.full_name,
+                "confidence": p.confidence,
+                "class_index": p.class_index,
+            }
             for p in result.predictions
         ],
         "all_probabilities": result.all_probabilities,
         "inference_time_ms": result.inference_time_ms,
         "threshold": result.threshold,
         "model": result.model,
+        "top_class": result.top_class,
+        "top_confidence": result.top_confidence,
         "filename": filename,
         "error": error,
     }

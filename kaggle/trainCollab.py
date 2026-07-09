@@ -1364,6 +1364,10 @@ def main():
     log.info(f"  Device  : {DEVICE}  |  GPUs: {N_GPUS}")
     if torch.cuda.is_available():
         log.info(f"  GPU     : {torch.cuda.get_device_name(0)}")
+        try:
+            log.info(f"  Supported CUDA Archs: {torch.cuda.get_arch_list()}")
+        except Exception:
+            pass
     log.info(f"  Batch   : per-phase adaptive (effective batch = 32 across all phases)")
     for _pi, _ph in enumerate(CFG["phases"], 1):
         _bs = _ph.get("batch_size", CFG["batch_size"])

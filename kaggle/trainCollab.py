@@ -151,11 +151,11 @@ CFG = {
     "val_split":      0.2,    # 80/20 stratified split
 
     # --- Three-phase fine-tuning (per-phase batch sizes for optimal VRAM usage) ---
-    # H100 80GB: aggressive batch sizes to fully utilise VRAM
+    # Tesla P100 16GB VRAM: optimized batch sizes to avoid OOM
     "phases": [
-        {"name": "head_only",     "epochs": 5,  "lr": 3e-4, "unfreeze": "head",          "batch_size": 64, "grad_accum_steps": 1},
-        {"name": "last_4_blocks", "epochs": 15, "lr": 5e-5, "unfreeze": "last_4_blocks", "batch_size": 32, "grad_accum_steps": 1},
-        {"name": "full_finetune", "epochs": 20, "lr": 1e-5, "unfreeze": "full",          "batch_size": 16, "grad_accum_steps": 2},
+        {"name": "head_only",     "epochs": 5,  "lr": 3e-4, "unfreeze": "head",          "batch_size": 32, "grad_accum_steps": 1},
+        {"name": "last_4_blocks", "epochs": 15, "lr": 5e-5, "unfreeze": "last_4_blocks", "batch_size": 16, "grad_accum_steps": 2},
+        {"name": "full_finetune", "epochs": 20, "lr": 1e-5, "unfreeze": "full",          "batch_size": 8,  "grad_accum_steps": 4},
     ],
 
     # --- Warmup ---

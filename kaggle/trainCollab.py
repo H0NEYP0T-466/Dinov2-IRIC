@@ -82,9 +82,22 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 SEED = 42
 
-# --- Dataset paths (Colab defaults) ----------------------------------------
-# The dataset is a simple folder structure: /content/data/<CLASS_NAME>/*.jpg
-if Path("/content/data/data").exists():
+# --- Dataset paths (Kaggle / Colab / Local) --------------------------------
+# The dataset is a simple folder structure: <root>/<CLASS_NAME>/*.jpg
+if Path("/kaggle/working/data/data").exists():
+    DATA_ROOT = Path("/kaggle/working/data/data")
+elif Path("/kaggle/working/data").exists():
+    DATA_ROOT = Path("/kaggle/working/data")
+elif Path("/kaggle/input").exists():
+    # Kaggle: find the data root by locating a known class folder (AK)
+    DATA_ROOT = None
+    for p in sorted(Path("/kaggle/input").rglob("AK")):
+        if p.is_dir() and (p.parent / "NV").is_dir():
+            DATA_ROOT = p.parent
+            break
+    if DATA_ROOT is None:
+        DATA_ROOT = Path("/kaggle/input")  # fallback
+elif Path("/content/data/data").exists():
     DATA_ROOT = Path("/content/data/data")
 elif Path("/content/data").exists():
     DATA_ROOT = Path("/content/data")
@@ -94,7 +107,9 @@ else:
     DATA_ROOT = Path("./data")  # local dev fallback
 
 # --- Output root -----------------------------------------------------------
-if Path("/content/drive/MyDrive").exists():
+if Path("/kaggle/working").exists():
+    OUTPUT_DIR = Path("/kaggle/working/Dinov2-IRIC-output")
+elif Path("/content/drive/MyDrive").exists():
     OUTPUT_DIR = Path("/content/drive/MyDrive/Dinov2-IRIC-output")
 elif Path("/content").exists():
     OUTPUT_DIR = Path("/content/Dinov2-IRIC-output")

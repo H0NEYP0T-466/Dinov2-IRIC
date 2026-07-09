@@ -69,7 +69,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from PIL import Image
@@ -84,7 +84,9 @@ SEED = 42
 
 # --- Dataset paths (Colab defaults) ----------------------------------------
 # The dataset is a simple folder structure: /content/data/<CLASS_NAME>/*.jpg
-if Path("/content/data").exists():
+if Path("/content/data/data").exists():
+    DATA_ROOT = Path("/content/data/data")
+elif Path("/content/data").exists():
     DATA_ROOT = Path("/content/data")
 elif Path("X:/file/FAST_API/Dinov2-IRIC/backend/dataset/data").exists():
     DATA_ROOT = Path("X:/file/FAST_API/Dinov2-IRIC/backend/dataset/data")
@@ -125,12 +127,12 @@ CFG = {
     "backbone_dim":   768,
     "num_classes":    NUM_CLASSES,
     "head_dropout":   0.3,
-    "image_size":     224,
+    "image_size":     518,
 
     # --- Data ---
-    "batch_size":     32 if N_GPUS >= 1 else 16,
+    "batch_size":     8 if N_GPUS >= 1 else 8,
     "num_workers":    2,       # Colab has limited CPU cores
-    "grad_accum_steps": 4,    # effective batch = 32 * 4 = 128
+    "grad_accum_steps": 4,    # effective batch = 8 * 4 = 32
     "val_split":      0.2,    # 80/20 stratified split
 
     # --- Three-phase fine-tuning ---
@@ -236,7 +238,7 @@ def gpu_mem_str() -> str:
         return "CPU mode"
     alloc = torch.cuda.memory_allocated() / 1e9
     reserved = torch.cuda.memory_reserved() / 1e9
-    total = torch.cuda.get_device_properties(0).total_mem / 1e9
+    total = torch.cuda.get_device_properties(0).total_memory / 1e9
     return f"GPU mem: {alloc:.1f}G alloc / {reserved:.1f}G reserved / {total:.1f}G total"
 
 
@@ -640,8 +642,8 @@ class CosineAnnealingWarmup(torch.optim.lr_scheduler._LRScheduler):
 
     def get_lr(self):
         if self.last_epoch < self.warmup_epochs:
-            # Linear warmup
-            alpha = self.last_epoch / max(1, self.warmup_epochs)
+            # Linear warmup — use (last_epoch + 1) so epoch 0 gets a non-zero LR
+            alpha = (self.last_epoch + 1) / max(1, self.warmup_epochs)
             return [base_lr * alpha for base_lr in self.base_lrs]
         else:
             # Cosine annealing
@@ -1210,7 +1212,7 @@ def evaluate_with_tta(model, val_paths, val_labels, out_dir, log):
         B, N, C, H, W = views.shape
         views_flat = views.view(B * N, C, H, W).to(DEVICE)
 
-        with autocast(enabled=CFG["use_amp"]):
+        with autocast('cuda', enabled=CFG["use_amp"]):
             logits = model(views_flat)  # (B*N, num_classes)
 
         logits = logits.view(B, N, -1)       # (B, N, num_classes)
@@ -1454,7 +1456,7 @@ def main():
             eta_min=1e-7,
         )
 
-        scaler = GradScaler(enabled=CFG["use_amp"])
+        scaler = GradScaler('cuda', enabled=CFG["use_amp"])
 
         for epoch_in_phase in range(1, n_epochs + 1):
             global_epoch += 1
@@ -1482,7 +1484,7 @@ def main():
                         imgs, labels_a, labels_b, lam = cutmix_data(
                             imgs, labels, alpha=CFG["cutmix_alpha"])
 
-                with autocast(enabled=CFG["use_amp"]):
+                with autocast('cuda', enabled=CFG["use_amp"]):
                     logits = model(imgs)
                     if use_mix:
                         loss = mixup_criterion(criterion, logits, labels_a, labels_b, lam) / CFG["grad_accum_steps"]
@@ -1537,7 +1539,7 @@ def main():
                     imgs = imgs.to(DEVICE, non_blocking=True)
                     labels = labels.to(DEVICE, non_blocking=True)
 
-                    with autocast(enabled=CFG["use_amp"]):
+                    with autocast('cuda', enabled=CFG["use_amp"]):
                         logits = model(imgs)
                         v_loss += criterion(logits, labels).item()
 

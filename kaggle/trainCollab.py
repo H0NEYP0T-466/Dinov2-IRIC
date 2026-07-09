@@ -1422,8 +1422,54 @@ def main():
     def _unwrap(m):
         return m.module if isinstance(m, nn.DataParallel) else m
 
+    # ── Check for resume checkpoint ─────────────────────────────────────────
+    resume_phase_idx = -1
+    resume_epoch_in_phase = 0
+    _resume_optimizer_state = None
+    _resume_scheduler_state = None
+    _resume_scaler_state = None
+    resume_path = ckpt_dir / "resume.pth"
+
+    if resume_path.exists():
+        log.info(f"\n  {'★' * 3} RESUME CHECKPOINT FOUND {'★' * 3}")
+        rstate = torch.load(resume_path, map_location=DEVICE, weights_only=False)
+
+        # Restore model weights
+        raw = _unwrap(model)
+        raw.load_state_dict(rstate["model_state"])
+
+        # Restore training counters
+        global_epoch = rstate["global_epoch"]
+        best_f1_macro = rstate["best_f1_macro"]
+        history = rstate["history"]
+
+        # Restore early stopping state
+        early.best = rstate["es_best"]
+        early.counter = rstate["es_counter"]
+        early.best_epoch = rstate["es_best_epoch"]
+
+        resume_phase_idx = rstate["phase_index"]
+        resume_epoch_in_phase = rstate["epoch_in_phase"]
+        _resume_optimizer_state = rstate.get("optimizer_state")
+        _resume_scheduler_state = rstate.get("scheduler_state")
+        _resume_scaler_state = rstate.get("scaler_state")
+
+        rph = CFG["phases"][resume_phase_idx]
+        log.info(f"  Resuming from: phase {resume_phase_idx} ({rph['name']}), "
+                 f"epoch_in_phase {resume_epoch_in_phase}/{rph['epochs']}, "
+                 f"global_epoch {global_epoch}")
+        log.info(f"  Best F1 Macro so far: {best_f1_macro:.4f}")
+        log.info(f"  Early stopping: counter={early.counter}/{early.patience}, "
+                 f"best={early.best:.4f} at epoch {early.best_epoch}")
+        log.info(f"  {'★' * 3} Skipping completed work… {'★' * 3}\n")
+
+        del rstate  # free memory
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     # ── Phase loop ──────────────────────────────────────────────────────────
-    for phase in CFG["phases"]:
+    for phase_idx, phase in enumerate(CFG["phases"]):
         pname = phase["name"]
         n_epochs = phase["epochs"]
         lr = phase["lr"]
@@ -1431,9 +1477,17 @@ def main():
         phase_bs = phase.get("batch_size", CFG["batch_size"])
         phase_accum = phase.get("grad_accum_steps", CFG["grad_accum_steps"])
 
+        # Skip fully completed phases on resume
+        if phase_idx < resume_phase_idx:
+            skipped_epochs = phase["epochs"]
+            log.info(f"  ⏭ Skipping completed phase {phase_idx} ({pname}) — {skipped_epochs} epochs")
+            continue  # global_epoch already correct from resume state
+
         log.info(f"\n{'═' * 70}")
         log.info(f"  PHASE: {pname}  |  epochs={n_epochs}  |  lr={lr}  |  unfreeze={unfreeze}")
         log.info(f"  batch_size={phase_bs}  |  grad_accum={phase_accum}  |  effective_batch={phase_bs * phase_accum}")
+        if phase_idx == resume_phase_idx and resume_epoch_in_phase > 0:
+            log.info(f"  ↳ Resuming from epoch_in_phase {resume_epoch_in_phase + 1}/{n_epochs}")
         log.info(f"{'═' * 70}")
 
         # Rebuild dataloaders with phase-specific batch size
@@ -1469,7 +1523,27 @@ def main():
 
         scaler = GradScaler('cuda', enabled=CFG["use_amp"])
 
-        for epoch_in_phase in range(1, n_epochs + 1):
+        # Restore optimizer/scheduler/scaler state if resuming mid-phase
+        if phase_idx == resume_phase_idx and _resume_optimizer_state is not None:
+            try:
+                optimizer.load_state_dict(_resume_optimizer_state)
+                scheduler.load_state_dict(_resume_scheduler_state)
+                if _resume_scaler_state is not None:
+                    scaler.load_state_dict(_resume_scaler_state)
+                log.info(f"  ✓ Restored optimizer/scheduler/scaler state from resume checkpoint")
+            except Exception as e:
+                log.warning(f"  ⚠ Could not restore optimizer state (will use fresh): {e}")
+            # Clear resume states to free memory
+            _resume_optimizer_state = None
+            _resume_scheduler_state = None
+            _resume_scaler_state = None
+
+        # Determine starting epoch (skip completed epochs on resume)
+        start_epoch_in_phase = 1
+        if phase_idx == resume_phase_idx and resume_epoch_in_phase > 0:
+            start_epoch_in_phase = resume_epoch_in_phase + 1
+
+        for epoch_in_phase in range(start_epoch_in_phase, n_epochs + 1):
             global_epoch += 1
             t0 = time.time()
             model.train()
@@ -1631,6 +1705,24 @@ def main():
                 {"loss": val_loss, **metrics},
                 is_best, ckpt_dir, log,
             )
+
+            # ──── Save resume state (crash recovery) ────
+            resume_payload = {
+                "model_state": _unwrap(model).state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+                "scheduler_state": scheduler.state_dict(),
+                "scaler_state": scaler.state_dict(),
+                "global_epoch": global_epoch,
+                "phase_index": phase_idx,
+                "epoch_in_phase": epoch_in_phase,
+                "best_f1_macro": best_f1_macro,
+                "history": history,
+                "es_best": early.best,
+                "es_counter": early.counter,
+                "es_best_epoch": early.best_epoch,
+            }
+            torch.save(resume_payload, ckpt_dir / "resume.pth")
+            log.info(f"  💾 Resume checkpoint saved → resume.pth")
 
             # ──── Prediction samples + curves every N epochs ────
             if global_epoch % CFG["save_images_every"] == 0:

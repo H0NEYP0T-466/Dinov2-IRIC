@@ -130,16 +130,17 @@ CFG = {
     "image_size":     518,
 
     # --- Data ---
-    "batch_size":     8 if N_GPUS >= 1 else 8,
+    "batch_size":     8,       # default batch size (overridden per phase)
     "num_workers":    2,       # Colab has limited CPU cores
-    "grad_accum_steps": 4,    # effective batch = 8 * 4 = 32
+    "grad_accum_steps": 4,    # default grad accum (overridden per phase)
     "val_split":      0.2,    # 80/20 stratified split
 
-    # --- Three-phase fine-tuning ---
+    # --- Three-phase fine-tuning (per-phase batch sizes for optimal VRAM usage) ---
+    # effective batch = batch_size × grad_accum_steps = 32 across all phases
     "phases": [
-        {"name": "head_only",     "epochs": 5,  "lr": 3e-4, "unfreeze": "head"},
-        {"name": "last_4_blocks", "epochs": 15, "lr": 5e-5, "unfreeze": "last_4_blocks"},
-        {"name": "full_finetune", "epochs": 20, "lr": 1e-5, "unfreeze": "full"},
+        {"name": "head_only",     "epochs": 5,  "lr": 3e-4, "unfreeze": "head",          "batch_size": 32, "grad_accum_steps": 1},
+        {"name": "last_4_blocks", "epochs": 15, "lr": 5e-5, "unfreeze": "last_4_blocks", "batch_size": 16, "grad_accum_steps": 2},
+        {"name": "full_finetune", "epochs": 20, "lr": 1e-5, "unfreeze": "full",          "batch_size": 8,  "grad_accum_steps": 4},
     ],
 
     # --- Warmup ---
@@ -725,8 +726,11 @@ def _compute_class_weights(labels: list[int], log: logging.Logger) -> torch.Tens
     return torch.tensor(weights, dtype=torch.float32).to(DEVICE)
 
 
-def _build_dataloaders(log: logging.Logger):
-    """Load folder-based dataset, return (train_loader, val_loader, class_weights, train_steps)."""
+def _prepare_datasets(log: logging.Logger):
+    """Scan dataset, split, create Dataset objects and sampler (done once).
+
+    Returns (train_ds, val_ds, class_weights, train_labels, val_paths, val_labels, sampler).
+    """
     from sklearn.model_selection import train_test_split
 
     # ---- Scan dataset ----
@@ -773,27 +777,27 @@ def _build_dataloaders(log: logging.Logger):
         replacement=True,
     )
 
+    return train_ds, val_ds, class_weights, train_labels, val_paths, val_labels, sampler
+
+
+def _create_dataloaders(train_ds, val_ds, sampler, batch_size, log: logging.Logger):
+    """Create DataLoaders with a specific batch size (called per phase).
+
+    Returns (train_loader, val_loader, train_steps).
+    """
     train_loader = DataLoader(
-        train_ds, batch_size=CFG["batch_size"], sampler=sampler,
+        train_ds, batch_size=batch_size, sampler=sampler,
         num_workers=CFG["num_workers"], pin_memory=True, drop_last=True,
     )
     val_loader = DataLoader(
-        val_ds, batch_size=CFG["batch_size"], shuffle=False,
+        val_ds, batch_size=batch_size, shuffle=False,
         num_workers=CFG["num_workers"], pin_memory=True,
     )
 
     train_steps = len(train_loader)
-    log.info(f"Train steps/epoch: {train_steps} | Val batches: {len(val_loader)}")
+    log.info(f"  DataLoaders: batch_size={batch_size} | train_steps/epoch={train_steps} | val_batches={len(val_loader)}")
 
-    # Sanity check
-    x, y = next(iter(train_loader))
-    log.info(f"Batch check: images {tuple(x.shape)} {x.dtype} | labels {tuple(y.shape)} {y.dtype}")
-
-    # Check batch class distribution (should be roughly balanced due to sampler)
-    batch_dist = np.bincount(y.numpy(), minlength=NUM_CLASSES)
-    log.info(f"First batch class distribution: {dict(zip(CLASSES, batch_dist.tolist()))}")
-
-    return train_loader, val_loader, class_weights, train_steps, val_paths, val_labels
+    return train_loader, val_loader, train_steps
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1345,7 +1349,11 @@ def main():
     log.info(f"  Device  : {DEVICE}  |  GPUs: {N_GPUS}")
     if torch.cuda.is_available():
         log.info(f"  GPU     : {torch.cuda.get_device_name(0)}")
-    log.info(f"  Batch   : {CFG['batch_size']}  (effective ~{CFG['batch_size'] * CFG['grad_accum_steps']})")
+    log.info(f"  Batch   : per-phase adaptive (effective batch = 32 across all phases)")
+    for _pi, _ph in enumerate(CFG["phases"], 1):
+        _bs = _ph.get("batch_size", CFG["batch_size"])
+        _ga = _ph.get("grad_accum_steps", CFG["grad_accum_steps"])
+        log.info(f"    Phase {_pi} ({_ph['name']:15s}): batch={_bs:2d} × accum={_ga} = {_bs * _ga}")
     log.info(f"  AMP     : {CFG['use_amp']}")
     log.info(f"  Classes : {NUM_CLASSES} ({', '.join(CLASSES)})")
     log.info(f"  Dataset : {DATA_ROOT}")
@@ -1364,13 +1372,9 @@ def main():
 
     # ── Dataset ─────────────────────────────────────────────────────────────
     log.info("\n[1/6] Loading dataset …")
-    train_loader, val_loader, class_weights, train_steps, val_paths, val_labels = _build_dataloaders(log)
+    train_ds, val_ds, class_weights, _, val_paths, val_labels, sampler = _prepare_datasets(log)
 
-    # Plot class distribution
-    all_labels = []
-    for _, labels in val_loader:
-        all_labels.extend(labels.numpy())
-    all_labels = np.array(all_labels)
+    # Plot class distribution (from folder scan — no dataloader needed)
     # Get all labels from the full dataset
     full_labels = []
     for class_idx, class_name in enumerate(CLASSES):
@@ -1424,10 +1428,17 @@ def main():
         n_epochs = phase["epochs"]
         lr = phase["lr"]
         unfreeze = phase["unfreeze"]
+        phase_bs = phase.get("batch_size", CFG["batch_size"])
+        phase_accum = phase.get("grad_accum_steps", CFG["grad_accum_steps"])
 
         log.info(f"\n{'═' * 70}")
         log.info(f"  PHASE: {pname}  |  epochs={n_epochs}  |  lr={lr}  |  unfreeze={unfreeze}")
+        log.info(f"  batch_size={phase_bs}  |  grad_accum={phase_accum}  |  effective_batch={phase_bs * phase_accum}")
         log.info(f"{'═' * 70}")
+
+        # Rebuild dataloaders with phase-specific batch size
+        train_loader, val_loader, train_steps = _create_dataloaders(
+            train_ds, val_ds, sampler, phase_bs, log)
 
         # Freeze / unfreeze
         raw = _unwrap(model)
@@ -1487,12 +1498,12 @@ def main():
                 with autocast('cuda', enabled=CFG["use_amp"]):
                     logits = model(imgs)
                     if use_mix:
-                        loss = mixup_criterion(criterion, logits, labels_a, labels_b, lam) / CFG["grad_accum_steps"]
+                        loss = mixup_criterion(criterion, logits, labels_a, labels_b, lam) / phase_accum
                     else:
-                        loss = criterion(logits, labels) / CFG["grad_accum_steps"]
+                        loss = criterion(logits, labels) / phase_accum
 
                 scaler.scale(loss).backward()
-                running_loss += loss.item() * CFG["grad_accum_steps"]
+                running_loss += loss.item() * phase_accum
 
                 # Track train accuracy (use original labels for mixup)
                 preds = torch.argmax(logits, dim=1)
@@ -1504,7 +1515,7 @@ def main():
                 running_total += labels.size(0)
 
                 accum += 1
-                if accum >= CFG["grad_accum_steps"]:
+                if accum >= phase_accum:
                     # Gradient clipping
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(trainable, max_norm=1.0)
@@ -1518,7 +1529,7 @@ def main():
                     log.info(
                         f"  [Phase {pname}] Epoch {global_epoch} "
                         f"Step {step}/{train_steps} "
-                        f"loss={loss.item() * CFG['grad_accum_steps']:.4f} "
+                        f"loss={loss.item() * phase_accum:.4f} "
                         f"acc={train_acc_so_far:.4f} "
                         f"lr={optimizer.param_groups[0]['lr']:.2e}"
                     )

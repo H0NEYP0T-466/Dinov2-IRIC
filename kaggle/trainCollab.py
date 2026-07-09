@@ -131,16 +131,16 @@ CFG = {
 
     # --- Data ---
     "batch_size":     8,       # default batch size (overridden per phase)
-    "num_workers":    2,       # Colab has limited CPU cores
+    "num_workers":    4,       # Kaggle has 4 CPU cores
     "grad_accum_steps": 4,    # default grad accum (overridden per phase)
     "val_split":      0.2,    # 80/20 stratified split
 
     # --- Three-phase fine-tuning (per-phase batch sizes for optimal VRAM usage) ---
-    # effective batch = batch_size × grad_accum_steps = 32 across all phases
+    # H100 80GB: aggressive batch sizes to fully utilise VRAM
     "phases": [
-        {"name": "head_only",     "epochs": 5,  "lr": 3e-4, "unfreeze": "head",          "batch_size": 32, "grad_accum_steps": 1},
-        {"name": "last_4_blocks", "epochs": 15, "lr": 5e-5, "unfreeze": "last_4_blocks", "batch_size": 16, "grad_accum_steps": 2},
-        {"name": "full_finetune", "epochs": 20, "lr": 1e-5, "unfreeze": "full",          "batch_size": 8,  "grad_accum_steps": 4},
+        {"name": "head_only",     "epochs": 5,  "lr": 3e-4, "unfreeze": "head",          "batch_size": 64, "grad_accum_steps": 1},
+        {"name": "last_4_blocks", "epochs": 15, "lr": 5e-5, "unfreeze": "last_4_blocks", "batch_size": 32, "grad_accum_steps": 1},
+        {"name": "full_finetune", "epochs": 20, "lr": 1e-5, "unfreeze": "full",          "batch_size": 16, "grad_accum_steps": 2},
     ],
 
     # --- Warmup ---
@@ -189,7 +189,7 @@ def seed_everything(seed: int = SEED):
     torch.cuda.manual_seed_all(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.benchmark = True   # safe with fixed 518×518 input; significant speedup
 
 
 seed_everything()

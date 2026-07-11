@@ -961,10 +961,10 @@ def save_checkpoint(model, epoch, optimizer, scheduler, train_m, val_m,
         "num_classes": NUM_CLASSES,
     }
 
-    # Save every epoch
-    epoch_path = ckpt_dir / f"epoch{epoch}.pth"
-    torch.save(payload, epoch_path)
-    log.info(f"  Saved checkpoint: {epoch_path.name}")
+    # Save resume checkpoint (overwritten each epoch)
+    resume_path = ckpt_dir / "resume.pth"
+    torch.save(payload, resume_path)
+    log.info(f"  Saved resume checkpoint: {resume_path.name} (epoch {epoch})")
 
     if is_best:
         best_path = ckpt_dir / "model_best.pth"

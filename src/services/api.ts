@@ -8,7 +8,7 @@
 
 import { ApiError, type ClassesResponse, type HealthResponse, type PredictionResponse } from '../types';
 
-const API_BASE: string = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000/api/v1';
+const API_BASE: string = import.meta.env.VITE_API_BASE ?? 'http://localhost:8011/api/v1';
 
 /** Accepted image MIME types, mirrors the backend allow-list. */
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff'];

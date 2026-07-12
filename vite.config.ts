@@ -10,7 +10,7 @@ export default defineConfig({
     // VITE_API_BASE env var (see src/services/api.ts) takes over.
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8011',
         changeOrigin: true,
       },
     },

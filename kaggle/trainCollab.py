@@ -948,25 +948,19 @@ class EarlyStopping:
 def save_checkpoint(model, epoch, optimizer, scheduler, train_m, val_m,
                     is_best, ckpt_dir, log):
     """Save model checkpoint."""
-    raw = model.module if isinstance(model, nn.DataParallel) else model
-    payload = {
-        "epoch": epoch,
-        "model_state": raw.state_dict(),
-        "optimizer_state": optimizer.state_dict(),
-        "scheduler_state": scheduler.state_dict(),
-        "train_metrics": train_m,
-        "val_metrics": val_m,
-        "config": {k: v for k, v in CFG.items() if not callable(v)},
-        "classes": CLASSES,
-        "num_classes": NUM_CLASSES,
-    }
-
-    # Save resume checkpoint (overwritten each epoch)
-    resume_path = ckpt_dir / "resume.pth"
-    torch.save(payload, resume_path)
-    log.info(f"  Saved resume checkpoint: {resume_path.name} (epoch {epoch})")
-
     if is_best:
+        raw = model.module if isinstance(model, nn.DataParallel) else model
+        payload = {
+            "epoch": epoch,
+            "model_state": raw.state_dict(),
+            "optimizer_state": optimizer.state_dict(),
+            "scheduler_state": scheduler.state_dict(),
+            "train_metrics": train_m,
+            "val_metrics": val_m,
+            "config": {k: v for k, v in CFG.items() if not callable(v)},
+            "classes": CLASSES,
+            "num_classes": NUM_CLASSES,
+        }
         best_path = ckpt_dir / "model_best.pth"
         torch.save(payload, best_path)
         log.info(f"  ★ New best model! (val_f1_macro={val_m['f1_macro']:.4f}) → model_best.pth")

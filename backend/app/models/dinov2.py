@@ -98,21 +98,99 @@ def build_model() -> MultiLabelDinoV2:
     return model
 
 
-def load_model(checkpoint_path: Path | str | None = None) -> tuple[MultiLabelDinoV2, str]:
+def load_model(checkpoint_path: Path | str | None = None) -> tuple[MultiLabelDinoV2, str, list[str]]:
     """Build the model and load weights from the best checkpoint.
+
+    The number of output classes is inferred from the checkpoint itself
+    (via stored ``num_classes`` metadata or by inspecting the final
+    classifier weight shape).  This avoids shape mismatches when the
+    config default differs from the checkpoint.
 
     Args:
         checkpoint_path: Override for the configured checkpoint path. Defaults
             to ``settings.model_checkpoint``.
 
     Returns:
-        (model, device) — model is on the target device and in eval mode.
+        (model, device, classes) — model is on the target device and in eval
+        mode; *classes* is the ordered class-name list that matches the model's
+        output indices.
     """
+    from ..config import ISIC_CLASSES  # local import to avoid circular ref
+
     device = settings.resolved_device
     path = Path(checkpoint_path) if checkpoint_path else settings.model_checkpoint
 
-    log.info("Loading model architecture | backbone=%s", settings.backbone_name)
-    model = build_model()
+    # ------------------------------------------------------------------
+    # 1. Load the checkpoint first so we can discover num_classes.
+    # ------------------------------------------------------------------
+    checkpoint = None
+    state_dict = None
+    num_classes = settings.num_classes  # fallback
+    classes: list[str] | None = None
+
+    if path.exists():
+        log.info("Loading checkpoint: %s", path)
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
+
+        if isinstance(checkpoint, dict) and "model_state" in checkpoint:
+            state_dict = checkpoint["model_state"]
+            log.info(
+                "Checkpoint metadata | epoch=%s | keys=%s",
+                checkpoint.get("epoch", "?"),
+                ", ".join(k for k in checkpoint.keys() if k != "model_state"),
+            )
+            # Prefer the explicit num_classes stored by the training loop.
+            if "num_classes" in checkpoint:
+                num_classes = int(checkpoint["num_classes"])
+                log.info(
+                    "Using num_classes=%d from checkpoint metadata.", num_classes,
+                )
+            # Also grab the class-name list if the training loop saved it.
+            if "classes" in checkpoint:
+                classes = list(checkpoint["classes"])
+                log.info("Using class list from checkpoint: %s", classes)
+        else:
+            state_dict = checkpoint
+
+        state_dict = _strip_module_prefix(state_dict)
+
+        # Fallback: infer from the final classifier weight shape.
+        if num_classes == settings.num_classes:
+            fc2_key = "classifier.fc2.weight"
+            if fc2_key in state_dict:
+                ckpt_num_classes = state_dict[fc2_key].shape[0]
+                if ckpt_num_classes != num_classes:
+                    log.info(
+                        "Overriding num_classes: config=%d → checkpoint=%d "
+                        "(inferred from %s shape %s).",
+                        num_classes,
+                        ckpt_num_classes,
+                        fc2_key,
+                        list(state_dict[fc2_key].shape),
+                    )
+                    num_classes = ckpt_num_classes
+    else:
+        log.warning(
+            "Checkpoint not found at %s — serving an UNTRAINED model. "
+            "Place a trained model_best.pth in backend/checkpoints/ for real predictions.",
+            path,
+        )
+
+    # If no class list was found in the checkpoint, fall back to config but
+    # truncate to match num_classes.
+    if classes is None:
+        classes = ISIC_CLASSES[:num_classes]
+        log.info("Falling back to config class list (first %d): %s", num_classes, classes)
+
+    # ------------------------------------------------------------------
+    # 2. Build model with the correct num_classes.
+    # ------------------------------------------------------------------
+    log.info(
+        "Loading model architecture | backbone=%s | num_classes=%d",
+        settings.backbone_name,
+        num_classes,
+    )
+    model = MultiLabelDinoV2(pretrained=False, num_classes=num_classes)
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -123,29 +201,10 @@ def load_model(checkpoint_path: Path | str | None = None) -> tuple[MultiLabelDin
         device,
     )
 
-    if not path.exists():
-        log.warning(
-            "Checkpoint not found at %s — serving an UNTRAINED model. "
-            "Place a trained model_best.pth in backend/checkpoints/ for real predictions.",
-            path,
-        )
-    else:
-        log.info("Loading checkpoint: %s", path)
-        checkpoint = torch.load(path, map_location=device, weights_only=False)
-
-        # Support both raw state_dicts and wrapped checkpoint dicts saved by
-        # the training loop (which embed model_state under "model_state").
-        if isinstance(checkpoint, dict) and "model_state" in checkpoint:
-            state_dict = checkpoint["model_state"]
-            log.info(
-                "Checkpoint metadata | epoch=%s | keys=%s",
-                checkpoint.get("epoch", "?"),
-                ", ".join(k for k in checkpoint.keys() if k != "model_state"),
-            )
-        else:
-            state_dict = checkpoint
-
-        state_dict = _strip_module_prefix(state_dict)
+    # ------------------------------------------------------------------
+    # 3. Load the state dict into the model.
+    # ------------------------------------------------------------------
+    if state_dict is not None:
         missing, unexpected = model.load_state_dict(state_dict, strict=False)
         if missing:
             log.warning("Missing keys when loading checkpoint: %s", missing[:10])
@@ -156,4 +215,5 @@ def load_model(checkpoint_path: Path | str | None = None) -> tuple[MultiLabelDin
     model = model.to(device)
     model.eval()
     log.info("Model set to eval mode on device '%s'.", device)
-    return model, device
+    return model, device, classes
+

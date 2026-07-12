@@ -51,17 +51,23 @@ class PredictionResult:
 class Predictor:
     """Wraps the loaded model and exposes a ``predict`` method."""
 
-    def __init__(self, model: MultiLabelDinoV2, device: str) -> None:
+    def __init__(self, model: MultiLabelDinoV2, device: str, classes: list[str]) -> None:
         self.model = model
         self.device = device
         self.threshold = settings.inference_threshold
         self.model_name = settings.model_name
-        self.num_classes = settings.num_classes
+        self.classes = classes
+        self.num_classes = len(classes)
+        # Build full-name lookup; fall back to abbreviation itself if missing.
+        self.class_full_names: dict[str, str] = {
+            c: ISIC_CLASS_FULL_NAMES.get(c, c) for c in classes
+        }
         log.info(
-            "Predictor ready | model=%s | device=%s | classes=%d | threshold=%.2f",
+            "Predictor ready | model=%s | device=%s | classes=%d (%s) | threshold=%.2f",
             self.model_name,
             self.device,
             self.num_classes,
+            self.classes,
             self.threshold,
         )
 
@@ -98,13 +104,13 @@ class Predictor:
 
         # Top-1 prediction
         top_idx = int(torch.argmax(logits_vec).item())
-        top_class = ISIC_CLASSES[top_idx]
+        top_class = self.classes[top_idx]
         top_conf = probabilities[top_idx]
 
         log.info(
             "Softmax probabilities | top_class=%s (%s) | confidence=%.4f",
             top_class,
-            ISIC_CLASS_FULL_NAMES[top_class],
+            self.class_full_names.get(top_class, top_class),
             top_conf,
         )
 
@@ -118,15 +124,15 @@ class Predictor:
 
         predictions = [
             Prediction(
-                class_name=ISIC_CLASSES[i],
-                full_name=ISIC_CLASS_FULL_NAMES[ISIC_CLASSES[i]],
+                class_name=self.classes[i],
+                full_name=self.class_full_names.get(self.classes[i], self.classes[i]),
                 confidence=round(p, 4),
                 class_index=i,
             )
             for i, p in detected
         ]
 
-        all_probs = {ISIC_CLASSES[i]: round(p, 4) for i, p in enumerate(probabilities)}
+        all_probs = {self.classes[i]: round(p, 4) for i, p in enumerate(probabilities)}
 
         if predictions:
             top_names = ", ".join(
@@ -159,8 +165,8 @@ _predictor: Predictor | None = None
 def init_predictor() -> Predictor:
     """Load the model and create the global Predictor. Called at startup."""
     global _predictor
-    model, device = load_model()
-    _predictor = Predictor(model, device)
+    model, device, classes = load_model()
+    _predictor = Predictor(model, device, classes)
     return _predictor
 
 

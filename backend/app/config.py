@@ -1,6 +1,6 @@
 """Application configuration and shared constants.
 
-The 9-class nomenclature below is the single source of truth for the whole
+The 8-class nomenclature below is the single source of truth for the whole
 system. It mirrors the official ISIC 2019 Challenge skin-lesion categories.
 The same literal is duplicated in:
 
@@ -18,7 +18,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
-# ISIC 2019 — 9-class skin-lesion nomenclature.
+# ISIC 2019 — 8-class skin-lesion nomenclature (UNK removed).
 # Order matches the one-hot column order in ISIC_2019_Training_GroundTruth.csv
 # and the model's output logit indices.
 # ---------------------------------------------------------------------------
@@ -31,7 +31,6 @@ ISIC_CLASSES: list[str] = [
     "DF",    # Dermatofibroma
     "VASC",  # Vascular lesion
     "SCC",   # Squamous cell carcinoma
-    "UNK",   # None of the above / Unknown
 ]
 
 ISIC_CLASS_FULL_NAMES: dict[str, str] = {
@@ -43,10 +42,9 @@ ISIC_CLASS_FULL_NAMES: dict[str, str] = {
     "DF":   "Dermatofibroma",
     "VASC": "Vascular lesion",
     "SCC":  "Squamous cell carcinoma",
-    "UNK":  "Unknown",
 }
 
-assert len(ISIC_CLASSES) == 9, f"Expected 9 classes, got {len(ISIC_CLASSES)}"
+assert len(ISIC_CLASSES) == 8, f"Expected 8 classes, got {len(ISIC_CLASSES)}"
 
 # ImageNet normalization statistics. DINOv2 was pretrained on ImageNet, so the
 # same mean/std must be used at inference time to match the training
@@ -72,7 +70,7 @@ class Settings(BaseSettings):
     model_name: str = "DINOv2-IRIC"
     backbone_name: str = "vit_base_patch14_dinov2.lvd142m"
     backbone_dim: int = 768
-    num_classes: int = 9
+    num_classes: int = 8
     dropout: float = 0.3
 
     # Path to the best checkpoint produced by the training script.

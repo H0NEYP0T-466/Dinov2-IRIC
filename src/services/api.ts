@@ -23,7 +23,7 @@ async function parseError(res: Response): Promise<string> {
 }
 
 /**
- * Upload an image and return multi-label predictions.
+ * Upload a dermoscopy image and return lesion predictions.
  * @throws {ApiError} on non-2xx responses or network failure.
  */
 export async function predictImage(file: File): Promise<PredictionResponse> {

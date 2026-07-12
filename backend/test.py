@@ -47,8 +47,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD  = (0.229, 0.224, 0.225)
 
-# All 9 ISIC-2019 class abbreviations (column order in the CSV)
-ALL_CSV_CLASSES = ["MEL", "NV", "BCC", "AK", "BKL", "DF", "VASC", "SCC", "UNK"]
+# All 8 ISIC-2019 class abbreviations (column order in the CSV)
+ALL_CSV_CLASSES = ["MEL", "NV", "BCC", "AK", "BKL", "DF", "VASC", "SCC"]
 
 
 def load_checkpoint(checkpoint_path: Path, device: str):
@@ -84,7 +84,7 @@ def load_checkpoint(checkpoint_path: Path, device: str):
     elif "classifier.fc2.weight" in state_dict:
         num_classes = state_dict["classifier.fc2.weight"].shape[0]
     else:
-        num_classes = 9  # fallback
+        num_classes = 8  # fallback
 
     # Determine class list
     if ckpt_classes is not None:
@@ -115,7 +115,7 @@ def load_checkpoint(checkpoint_path: Path, device: str):
         image_size = data_cfg.get("input_size", (3, 518, 518))[-1]
     except Exception:
         pass
-    print(f"       Input size: {image_size}×{image_size}")
+    print(f"       Input size: {image_size}x{image_size}")
 
     return model, classes, image_size
 
@@ -167,9 +167,58 @@ def load_ground_truth(csv_path: Path, model_classes: list[str]):
     return df
 
 
-def run_inference(model, df, transform, image_dir: Path, device: str):
-    """Run inference on all images and return arrays of true/predicted labels."""
-    print(f"\n[3/4] Running inference on {len(df)} images...")
+class ISICTestDataset(torch.utils.data.Dataset):
+    """Simple map-style dataset for the ISIC test images."""
+
+    def __init__(self, df: pd.DataFrame, image_dir: Path, transform):
+        self.df = df.reset_index(drop=True)
+        self.image_dir = image_dir
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        image_path = self.image_dir / f"{row['image']}.jpg"
+        label = int(row["true_label"])
+
+        try:
+            img = Image.open(image_path).convert("RGB")
+            tensor = self.transform(img)
+            return tensor, label, True  # (image, label, valid)
+        except Exception:
+            # Return a dummy tensor for failed images; flagged as invalid
+            return torch.zeros(3, 518, 518), label, False
+
+
+def _collate_fn(batch):
+    """Custom collate that filters out invalid samples."""
+    tensors, labels, valids = zip(*batch)
+    # Keep only valid samples
+    valid_tensors = [t for t, v in zip(tensors, valids) if v]
+    valid_labels = [l for l, v in zip(labels, valids) if v]
+    n_invalid = sum(1 for v in valids if not v)
+
+    if not valid_tensors:
+        return None, None, n_invalid
+
+    return torch.stack(valid_tensors), torch.tensor(valid_labels), n_invalid
+
+
+def run_inference(model, df, transform, image_dir: Path, device: str, batch_size: int = 16):
+    """Run batched inference on all images and return arrays of true/predicted labels."""
+    print(f"\n[3/4] Running inference on {len(df)} images (batch_size={batch_size})...")
+
+    dataset = ISICTestDataset(df, image_dir, transform)
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,       # 0 workers avoids multiprocessing issues on Windows
+        pin_memory=(device != "cpu"),
+        collate_fn=_collate_fn,
+    )
 
     y_true = []
     y_pred = []
@@ -178,31 +227,22 @@ def run_inference(model, df, transform, image_dir: Path, device: str):
 
     start_time = time.perf_counter()
 
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Predicting", unit="img"):
-        image_name = row["image"]
-        image_path = image_dir / f"{image_name}.jpg"
-
-        if not image_path.exists():
-            errors += 1
+    for batch_imgs, batch_labels, n_invalid in tqdm(loader, desc="Predicting", unit="batch"):
+        errors += n_invalid
+        if batch_imgs is None:
             continue
 
-        try:
-            img = Image.open(image_path).convert("RGB")
-            tensor = transform(img).unsqueeze(0).to(device)
+        batch_imgs = batch_imgs.to(device)
 
-            with torch.no_grad():
-                logits = model(tensor)
-                probs = torch.softmax(logits.squeeze(0), dim=0).cpu().numpy()
+        with torch.no_grad():
+            logits = model(batch_imgs)  # (B, num_classes)
+            probs = torch.softmax(logits, dim=1).cpu().numpy()
 
-            pred_idx = int(np.argmax(probs))
-            y_true.append(row["true_label"])
-            y_pred.append(pred_idx)
-            y_prob.append(probs)
+        pred_indices = np.argmax(probs, axis=1)
 
-        except Exception as e:
-            errors += 1
-            if errors <= 3:
-                print(f"  [WARN]  Error processing {image_name}: {e}")
+        y_true.extend(batch_labels.numpy().tolist())
+        y_pred.extend(pred_indices.tolist())
+        y_prob.extend(probs)
 
     elapsed = time.perf_counter() - start_time
     imgs_per_sec = len(y_true) / elapsed if elapsed > 0 else 0
@@ -408,13 +448,35 @@ def compute_and_display_metrics(y_true, y_pred, y_prob, classes: list[str]):
 # Main
 # ---------------------------------------------------------------------------
 def main():
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description="DINOv2-IRIC Test Set Evaluation")
+    parser.add_argument(
+        "--limit", "-n", type=int, default=None,
+        help="Limit evaluation to N samples (for quick testing). Default: all.",
+    )
+    parser.add_argument(
+        "--batch-size", "-b", type=int, default=8,
+        help="Batch size for inference. Default: 8.",
+    )
+    args = parser.parse_args()
+
+    # Maximize CPU threads
+    cpu_count = os.cpu_count() or 2
+    torch.set_num_threads(cpu_count)
+    torch.set_num_interop_threads(cpu_count)
+
     print("\n" + "=" * 70)
-    print("  DINOv2-IRIC  —  Test Set Evaluation")
+    print("  DINOv2-IRIC -- Test Set Evaluation")
     print("=" * 70 + "\n")
 
     # Device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"  Device: {device}")
+    print(f"  Threads: {torch.get_num_threads()}")
+    if args.limit:
+        print(f"  Limit: {args.limit} samples")
 
     # Verify paths
     if not CHECKPOINT.exists():
@@ -430,11 +492,24 @@ def main():
     # Load ground truth
     df = load_ground_truth(CSV_PATH, classes)
 
+    # Apply limit if specified
+    if args.limit and args.limit < len(df):
+        # Stratified sampling to keep class proportions
+        df = (
+            df.groupby("true_class", group_keys=False)
+            .apply(lambda x: x.sample(n=min(len(x), max(1, int(args.limit * len(x) / len(df)))),
+                                       random_state=42))
+            .reset_index(drop=True)
+        )
+        print(f"  [INFO] Limited to {len(df)} samples (stratified)")
+
     # Build transform
     transform = build_transform(image_size)
 
     # Run inference
-    y_true, y_pred, y_prob = run_inference(model, df, transform, IMAGE_DIR, device)
+    y_true, y_pred, y_prob = run_inference(
+        model, df, transform, IMAGE_DIR, device, batch_size=args.batch_size,
+    )
 
     if len(y_true) == 0:
         sys.exit("  [FAIL] No images were successfully processed!")
@@ -447,3 +522,4 @@ if __name__ == "__main__":
     # Add backend dir to path so we can import the app package
     sys.path.insert(0, str(BACKEND_DIR))
     main()
+

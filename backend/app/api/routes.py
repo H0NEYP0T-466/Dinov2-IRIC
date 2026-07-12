@@ -4,7 +4,7 @@ Endpoints (mounted under ``settings.api_v1_prefix``):
 
 * ``POST /predict``  — upload an image, get skin-lesion classification.
 * ``GET  /health``   — server / model status.
-* ``GET  /classes``  — the 9 ISIC 2019 class names.
+* ``GET  /classes``  — the 8 ISIC 2019 class names.
 
 Every request is assigned a UUID and logged in full (file metadata,
 preprocessing steps, inference details, response summary, errors with stack
@@ -57,7 +57,7 @@ async def health() -> dict:
 
 @router.get("/classes")
 async def classes() -> dict:
-    """Return the full 9-class ISIC nomenclature."""
+    """Return the full 8-class ISIC nomenclature."""
     log.info("Classes requested | count=%d", len(ISIC_CLASSES))
     return {"count": len(ISIC_CLASSES), "classes": ISIC_CLASSES}
 

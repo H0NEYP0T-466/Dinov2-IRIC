@@ -4,7 +4,7 @@ Instantiated once at application startup (see :func:`get_predictor`) and shared
 across requests. All inference details — raw logits, softmax probabilities,
 predicted class, timing — are logged.
 
-ISIC 2019 is a **single-label** classification task (9 classes). The model
+ISIC 2019 is a **single-label** classification task (8 classes). The model
 outputs raw logits; softmax is applied here to get probabilities, and the
 top-1 class is reported as the prediction.
 """

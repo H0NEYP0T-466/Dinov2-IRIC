@@ -1,7 +1,7 @@
 /**
- * Dinov2-BigEarthS2 — single-page satellite image classifier.
+ * Dinov2-IRIC — single-page skin lesion classifier.
  *
- * Upload an image -> POST to backend -> display multi-label predictions.
+ * Upload a dermoscopy image -> POST to backend -> display lesion predictions.
  */
 
 import { useState } from 'react';
@@ -33,9 +33,9 @@ function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <h1>Dinov2-BigEarthS2</h1>
+        <h1>Dinov2-IRIC</h1>
         <p className="app__subtitle">
-          Multi-label satellite image classification · DINOv2-B · 43 classes
+          8-class skin lesion classification · DINOv2-B · ISIC 2019
         </p>
       </header>
 
@@ -68,7 +68,7 @@ function App() {
       </main>
 
       <footer className="app__footer">
-        <span>DINOv2-B · BigEarthNet-S2 · local deployment</span>
+        <span>DINOv2-B · ISIC 2019 · local deployment</span>
       </footer>
     </div>
   );

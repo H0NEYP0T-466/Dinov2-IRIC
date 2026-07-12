@@ -1,1 +1,1 @@
-"""Dinov2-BigEarthS2 backend application package."""
+"""Dinov2-IRIC backend application package."""

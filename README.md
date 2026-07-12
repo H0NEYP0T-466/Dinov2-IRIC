@@ -21,8 +21,7 @@ Single-label classification (9 skin-lesion categories). RGB dermoscopic images.
 | BKL  | Benign keratosis | Seborrheic keratosis / solar lentigo |
 | DF   | Dermatofibroma | Benign fibrous nodule |
 | VASC | Vascular lesion | Blood vessel related |
-| SCC  | Squamous cell carcinoma | Skin cancer from squamous cells |
-| UNK  | Unknown | None of the above |
+| SCC  | Squamous cell carcinoma |
 
 ---
 

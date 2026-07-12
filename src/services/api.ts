@@ -1,5 +1,5 @@
 /**
- * API client for the Dinov2-BigEarthS2 backend.
+ * API client for the Dinov2-IRIC backend.
  *
  * Base URL is configurable via the `VITE_API_BASE` env var (see `.env`),
  * defaulting to the Vite dev proxy path `/api/v1` so the browser and backend
@@ -64,7 +64,7 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return (await res.json()) as HealthResponse;
 }
 
-/** Fetch the 43-class list. */
+/** Fetch the 8-class ISIC list. */
 export async function fetchClasses(): Promise<ClassesResponse> {
   const res = await fetch(`${API_BASE}/classes`);
   if (!res.ok) throw new ApiError(await parseError(res), res.status);

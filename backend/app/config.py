@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     # --- Inference ---------------------------------------------------------
     device: str = "auto"  # "auto" picks CUDA if available, else CPU
     inference_threshold: float = 0.5  # min confidence to report a prediction
-    image_size: int = 224
+    image_size: int = 518
 
     # --- Server ------------------------------------------------------------
     api_v1_prefix: str = "/api/v1"

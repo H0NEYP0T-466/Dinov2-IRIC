@@ -2,11 +2,11 @@
  * Prediction results display.
  *
  * Shows detected classes (above threshold) sorted by confidence, a metadata
- * strip, and an expandable section listing ALL 43 class probabilities.
+ * strip, and an expandable section listing ALL 8 class probabilities.
  */
 
 import { useMemo, useState } from 'react';
-import { CLASS_NAMES, type PredictionResponse } from '../types';
+import { CLASS_NAMES, CLASS_FULL_NAMES, type PredictionResponse } from '../types';
 import { ConfidenceBar } from './ConfidenceBar';
 
 interface PredictionResultsProps {
@@ -20,6 +20,7 @@ export function PredictionResults({ result }: PredictionResultsProps) {
   const sortedAll = useMemo(() => {
     return CLASS_NAMES.map((name) => ({
       name,
+      fullName: CLASS_FULL_NAMES[name] ?? name,
       value: result.all_probabilities[name] ?? 0,
     })).sort((a, b) => b.value - a.value);
   }, [result.all_probabilities]);
@@ -46,6 +47,7 @@ export function PredictionResults({ result }: PredictionResultsProps) {
             <ConfidenceBar
               key={p.class_index}
               name={p.class_name}
+              fullName={CLASS_FULL_NAMES[p.class_name] ?? p.class_name}
               value={p.confidence}
               threshold={result.threshold}
             />
@@ -59,12 +61,13 @@ export function PredictionResults({ result }: PredictionResultsProps) {
       )}
 
       <details className="results__all" open={showAll} onToggle={(e) => setShowAll(e.currentTarget.open)}>
-        <summary>All 43 class probabilities</summary>
+        <summary>All 8 class probabilities</summary>
         <div className="results__all-grid">
-          {sortedAll.map(({ name, value }) => (
+          {sortedAll.map(({ name, fullName, value }) => (
             <ConfidenceBar
               key={name}
               name={name}
+              fullName={fullName}
               value={value}
               threshold={result.threshold}
               dim

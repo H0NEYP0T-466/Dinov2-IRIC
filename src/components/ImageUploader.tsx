@@ -79,8 +79,8 @@ export function ImageUploader({ onClassify, loading }: ImageUploaderProps) {
         ) : (
           <div className="uploader__hint">
             <div className="uploader__hint-icon">⬆</div>
-            <p>Drag &amp; drop a satellite image here</p>
-            <p className="uploader__hint-sub">or click to browse</p>
+            <p>Drag &amp; drop a skin lesion image here</p>
+            <p className="uploader__hint-sub">Dermoscopy image · JPG, PNG, WEBP, BMP, or TIFF</p>
           </div>
         )}
         <input
@@ -106,7 +106,7 @@ export function ImageUploader({ onClassify, loading }: ImageUploaderProps) {
           <div className="uploader__actions">
             <button
               type="button"
-              className="btn btn--secondary"
+              className="btn btn--ghost"
               onClick={handleClear}
               disabled={loading}
             >

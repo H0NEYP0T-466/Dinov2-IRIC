@@ -19,7 +19,7 @@ export interface PredictionResponse {
   request_id: string;
   success: boolean;
   predictions: Prediction[];
-  /** All 9 class names -> probability. */
+  /** All 8 class names -> probability. */
   all_probabilities: Record<string, number>;
   inference_time_ms: number;
   threshold: number;
@@ -46,7 +46,7 @@ export interface ClassesResponse {
 }
 
 /**
- * ISIC 2019 — 9-class skin-lesion nomenclature, matching the backend
+ * ISIC 2019 — 8-class skin-lesion nomenclature, matching the backend
  * `ISIC_CLASSES` and the training script. Used for the full
  * probability-distribution view in the UI.
  */
@@ -59,7 +59,6 @@ export const CLASS_NAMES: readonly string[] = [
   'DF',    // Dermatofibroma
   'VASC',  // Vascular lesion
   'SCC',   // Squamous cell carcinoma
-  'UNK',   // Unknown
 ] as const;
 
 /** Full descriptive names for each ISIC class abbreviation. */
@@ -72,13 +71,12 @@ export const CLASS_FULL_NAMES: Record<string, string> = {
   DF:   'Dermatofibroma',
   VASC: 'Vascular lesion',
   SCC:  'Squamous cell carcinoma',
-  UNK:  'Unknown',
 };
 
-/** Runtime guard: CLASS_NAMES stays in sync with the backend's 9 classes. */
-if (CLASS_NAMES.length !== 9) {
+/** Runtime guard: CLASS_NAMES stays in sync with the backend's 8 classes. */
+if (CLASS_NAMES.length !== 8) {
   throw new Error(
-    `CLASS_NAMES must contain 9 entries (got ${CLASS_NAMES.length}). ` +
+    `CLASS_NAMES must contain 8 entries (got ${CLASS_NAMES.length}). ` +
       'Sync with backend/app/config.py ISIC_CLASSES.',
   );
 }

@@ -32,11 +32,17 @@ from tqdm import tqdm
 # Paths  (adjust if your layout differs)
 # ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent
-DATASET_DIR = BACKEND_DIR / "dataset" / "ISIC_2019_Test_Input"
+from pathlib import Path
+
+WORKING_DIR = Path("/kaggle/working")
+
+DATASET_DIR = WORKING_DIR / "ISIC_2019_Test_Input"
 CSV_PATH    = DATASET_DIR / "ISIC_2019_Test_GroundTruth.csv"
 IMAGE_DIR   = DATASET_DIR / "ISIC_2019_Test_Input"
-CHECKPOINT  = BACKEND_DIR / "checkpoints" / "model_best.pth"
-OUTPUT_DIR  = BACKEND_DIR / "test_results"
+
+CHECKPOINT  = WORKING_DIR / "model_best_weights_only.pth"
+
+OUTPUT_DIR  = WORKING_DIR / "test_results"
 
 # Create output directory
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

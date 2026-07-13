@@ -32,20 +32,17 @@ from tqdm import tqdm
 # Paths  (adjust if your layout differs)
 # ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent
-from pathlib import Path
-
 WORKING_DIR = Path("/kaggle/working")
 
-DATASET_DIR = WORKING_DIR / "ISIC_2019_Test_Input"
-CSV_PATH    = DATASET_DIR / "ISIC_2019_Test_GroundTruth.csv"
-IMAGE_DIR   = DATASET_DIR / "ISIC_2019_Test_Input"
+CSV_PATH   = WORKING_DIR / "ISIC_2019_Test_GroundTruth.csv"
+IMAGE_DIR  = WORKING_DIR / "ISIC_2019_Test_Input"
 
-CHECKPOINT  = WORKING_DIR / "model_best_weights_only.pth"
+CHECKPOINT = WORKING_DIR / "model_best_weights_only.pth"
 
-OUTPUT_DIR  = WORKING_DIR / "test_results"
-
-# Create output directory
+OUTPUT_DIR = WORKING_DIR / "test_results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
 
 # ---------------------------------------------------------------------------
 # ImageNet normalisation (must match training pipeline)

@@ -430,7 +430,7 @@ TTA (5 views per image) was also run at the end of training, nudging macro recal
 
 ## 🏗 Model architecture
 
-![Architecture Diagram](./visuals/architecture.png)
+![Architecture Diagram](./visuals/architecture.jpeg)
 
 ```
 Input (1, 3, 224, 224)

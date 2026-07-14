@@ -4,6 +4,9 @@
      Training (Colab) · FastAPI backend · React + TS frontend.
      ══════════════════════════════════════════════════════════════════════ -->
 
+<h1 align="center">🧬 Dinov2-ISIC</h1>
+<p align="center"><b>Skin Lesion Classification with DINOv2</b> — an end-to-end AI system that fine-tunes a DINOv2-B vision transformer (~86M params) on the ISIC 2019 benchmark for 8-class dermoscopic image classification.</p>
+
 <!-- Badges — Core -->
 <p align="center">
 
@@ -379,8 +382,6 @@ The model was evaluated on the **official ISIC 2019 test set** (8,238 images) vi
 > Full metrics: [`visuals/test_results/metrics.csv`](./visuals/test_results/metrics.csv)
 
 ### Per-class test report
-
-![Test Per-Class Report](./visuals/test_results/per_class_report.csv)
 
 | Class | Precision | Recall | F1 | Support |
 |-------|-----------|--------|-----|---------|

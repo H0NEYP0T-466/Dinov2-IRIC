@@ -187,6 +187,8 @@ npm run dev          # http://localhost:5173
 
 The Vite dev server proxies `/api` → `http://localhost:8000` (see `vite.config.ts`).
 
+![Web UI](./visuals/webui.PNG)
+
 ### Call the API directly (CLI)
 
 ```bash
@@ -427,6 +429,8 @@ TTA (5 views per image) was also run at the end of training, nudging macro recal
 ---
 
 ## 🏗 Model architecture
+
+![Architecture Diagram](./visuals/architecture.png)
 
 ```
 Input (1, 3, 224, 224)

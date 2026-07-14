@@ -1,0 +1,119 @@
+name: 🐛 Bug Report
+description: Report a reproducible problem in Dinov2-ISIC
+title: "[Bug]: "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill out the sections below so we can reproduce and fix the issue.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-report checklist
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I am using the latest version of the `master` branch
+          required: false
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, concise description of the bug.
+      placeholder: "The prediction endpoint returns a 500 error when uploading PNG images."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps to reproduce the problem.
+      placeholder: |
+        1. Start the backend with `python -m app.main`
+        2. Run `curl -X POST http://localhost:8000/api/v1/predict -F "file=@sample.png"`
+        3. Observe the error...
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+      placeholder: "The API should return a JSON prediction with the top class and confidence score."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include any error messages.
+      placeholder: "The server returned HTTP 500 with a KeyError traceback."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / traceback
+      description: Paste any relevant log output or traceback here.
+      render: shell
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem. (optional)
+
+  - type: input
+    id: screenshots_link
+    attributes:
+      label: Screenshots (link)
+      description: Or paste a link to screenshots here.
+      placeholder: "https://..."
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this bug?
+      options:
+        - Low — cosmetic / minor inconvenience
+        - Medium — affects functionality but there's a workaround
+        - High — major functionality broken, no workaround
+        - Critical — crash / data loss / security issue
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please provide details about your environment.
+      placeholder: |
+        - OS: [e.g. Windows 11, Ubuntu 22.04]
+        - Python version: [e.g. 3.12.13]
+        - Node version: [e.g. 20.11.0]
+        - GPU: [e.g. NVIDIA Tesla T4 / none (CPU)]
+        - Component: [backend / frontend / training script]
+        - Commit/branch: [e.g. master @ c3342db]
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add any other context about the problem here.
+      placeholder: "I noticed this started after updating torch to 2.10..."

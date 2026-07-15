@@ -22,7 +22,7 @@ venv/
 env/
 .env
 
-# Backend runtime artifacts (keep the .gitkeep markers, ignore contents)
+
 backend/logs/*
 !backend/logs/.gitkeep
 backend/checkpoints/*
